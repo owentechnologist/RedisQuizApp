@@ -9,6 +9,7 @@ import redis.clients.jedis.params.ScanParams;
 import redis.clients.jedis.resps.ScanResult;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -54,6 +55,7 @@ import java.util.Map;
  *
  */
 public class Main {
+    static boolean debugJSON=false;
     static boolean doAddQuestions=false;
     static boolean doLoadQuestions=true;
     static JedisPooled jedisPooled = null;
@@ -67,6 +69,7 @@ public class Main {
     static String sessionQuestionKeysRemaining="sessionQuestionKeysRemaining";
     static String questionKeysAsked = "questionKeysAsked";
     static String jsonQuestionKeyPrefix="json:rqa:";
+    static final BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
 
     public static void main(String[] args) {
         ArrayList<String> argList = null;
@@ -91,6 +94,10 @@ public class Main {
             if (argList.contains("--port")) {
                 int argIndex = argList.indexOf("--port");
                 port = Integer.parseInt(argList.get(argIndex + 1));
+            }
+            if (argList.contains("--debugjson")) {
+                int argIndex = argList.indexOf("--debugjson");
+                debugJSON = Boolean.parseBoolean(argList.get(argIndex + 1));
             }
             if (argList.contains("--addquestions")) {
                 int argIndex = argList.indexOf("--addquestions");
@@ -118,6 +125,7 @@ public class Main {
                 loadJSONDataFromFile(filepath);
             } catch (Throwable t) {
                 t.printStackTrace();
+                System.exit(0);
             }
         }
         while(true){
@@ -134,7 +142,7 @@ public class Main {
             s = reader.readLine();
             if(null!=s && s.length()>1) {
                 String[] lineRead = s.split("~");
-                if (pipeCounter % 1000 == 0) {
+                if ((pipeCounter % 1000 == 0)||(debugJSON==true)) {
                     System.out.println("SAMPLE QUESTION key with JSON value follows [DEBUG INFO]...");
                     System.out.println("key == " + lineRead[0]);//# DEBUG
                     System.out.println("json == " + lineRead[1]+"\n\n");//# DEBUG
@@ -183,32 +191,35 @@ public class Main {
         jedisPipeline.sync();
         int howManyTimes = 1000000000;//Seting this ridiculously high to force at least one execution of the ask for #Questions
         try {
-            BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(System.in));
             while(howManyTimes>totalNumberAvailableQuestions) {
                 System.out.println("There are "+totalNumberAvailableQuestions+" total questions available");
                 System.out.println("How many questions do you want in your quiz? [enter a number] ");
-                howManyTimes = Integer.parseInt(reader.readLine());
+                howManyTimes = Integer.parseInt(getUserInput(""));
                 System.out.println("\nSTARTING QUIZ:\n\n");
             }
             for (int x = 0; x < howManyTimes; x++) {
-                System.out.println("\n** When answering: Enter the number corresponding to the most correct of the provided possible answers **\nHere is your question -\n");
+                String input = null;
+                System.out.println("\t\t***********************\n\t\tHit Enter to continue...");
+                input = getUserInput("");
+                System.out.println("\n\n** When answering: Enter the number corresponding to the most correct of the provided possible answers **");
+                System.out.println("\n\t\t***********************\n" +
+                        "\t\tHere is your question\n" +
+                        "\t\t***********************\n");
                 jedisPooled.sdiffstore(uid+sessionQuestionKeysRemaining,uid+knownQuestionKeys,uid+questionKeysAsked);
                 String questionKey = jedisPooled.srandmember(uid+"sessionQuestionKeysRemaining");
                 jedisPooled.sadd(uid+"questionKeysAsked",questionKey);
                 jedisPooled.del(uid+sessionQuestionKeysRemaining);
                 String questionID = jedisPooled.jsonGet(questionKey,new Path("$.questionID")).toString();
                 String question = jedisPooled.jsonGet(questionKey,new Path("$.questionContent")).toString();
-                System.out.println("QuestionID="+questionID+"\n\t"+question);
+                System.out.println("QuestionID="+questionID+"\n\n\t"+question);
                 String answerPossibilitiesString = jedisPooled.jsonGet(questionKey,new Path("$.answerOptions")).toString();
-                System.out.println(answerPossibilitiesString);
+                System.out.println("\n"+answerPossibilitiesString);
                 String correctAnswer = jedisPooled.jsonGet(questionKey,new Path("$.correctAnswer")).toString();
 
-                String input = null;
-                input = reader.readLine();
-                System.out.println("you entered "+input);
+                input = getUserInput("");
+                System.out.println("\t\t***********************\n\t\tyou entered "+input);
                 if(correctAnswer.contains(input)){
-                    System.out.println("Huzzah! correct!\n");
+                    System.out.println("\t\t***********************\n\t\tHuzzah! THAT IS CORRECT!\n");
                     jedisPooled.hincrBy(uid+"quizScores","correctAnswerCount",1);
                 }else{
                     System.out.println("Sorry - that is not correct...\n"+correctAnswer+"\n");
@@ -224,11 +235,9 @@ public class Main {
     static void menu(){
         int choice=0;
         try {
-            BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(System.in));
-            System.out.println("Here are your options: \n[1] take a quiz\n[2] exit");
+            System.out.println("Here are your options: \n[1] take a quiz\n[2] exit\n");
             System.out.println("Enter your choice as a number: ");
-            choice = Integer.parseInt(reader.readLine());
+            choice = Integer.parseInt(getUserInput(""));
             if(choice==1){
                 jedisPooled.hincrBy(uid+"quizScores","numberOfQuizzesForThisSession",1);
                 takeQuiz();
@@ -243,7 +252,7 @@ public class Main {
                         " Questions incorrectly and answered " + correctCount +" Questions correctly");
                 System.out.println("Your score is: "+percentageCorrect+"%");
 
-                        System.exit(0);
+                System.exit(0);
             }else{
                 System.out.println("You entered: "+choice+" That is not a valid option - exiting program...");
                 System.exit(0);
@@ -255,6 +264,17 @@ public class Main {
             }
             System.exit(1);
         }
+    }
+
+    static String getUserInput(String prompt){
+        String userInput = "";
+        try{
+            System.out.println(prompt);
+            userInput= reader.readLine();
+        }catch(IOException ioe){
+            ioe.printStackTrace();
+        }
+        return userInput;
     }
 
 }

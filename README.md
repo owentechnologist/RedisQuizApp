@@ -11,3 +11,9 @@ mvn compile exec:java -Dexec.cleanupDaemonThreads=false -Dexec.args="--host myho
 ```
 mvn compile exec:java -Dexec.cleanupDaemonThreads=false -Dexec.args="--host myhost.com --port 10000 --loadquestions false"
 ```
+
+* To run the program with a specific password and filepath to a different question source file do:
+
+``` 
+mvn compile exec:java -Dexec.cleanupDaemonThreads=false -Dexec.args="--host redis-11100.cnn.non-gbg-2.gce.cloud.redislabs.com --port 11100 --password 5jrLKFWjuNqd**^^%%TY^% --filepath src/main/resources/jsonkeyvaluePrivate.tldf"
+```
