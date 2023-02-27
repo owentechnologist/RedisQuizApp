@@ -128,9 +128,17 @@ public class Main {
                 System.exit(0);
             }
         }
-        while(true){
-            menu();
+        try {
+            int userChoice = 0;
+            while (userChoice<2) {
+                userChoice = menu();
+            }
+        }catch( Throwable t){
+            t.printStackTrace(); // just in case somthing breaks before we get a chance to display results
         }
+        System.out.println("\n\t\t******* Exiting Program - but first ... your results: *******\n");
+        printTestResults();
+        System.out.println("\n\n\t\t*******  Until Next Time! *******\n\n");
     }
 
     static int loadJSONDataFromFile(String path) throws Throwable{
@@ -232,38 +240,39 @@ public class Main {
         }
     }
 
-    static void menu(){
+    static int menu(){
         int choice=0;
-        try {
-            System.out.println("Here are your options: \n[1] take a quiz\n[2] exit\n");
-            System.out.println("Enter your choice as a number: ");
-            choice = Integer.parseInt(getUserInput(""));
-            if(choice==1){
-                jedisPooled.hincrBy(uid+"quizScores","numberOfQuizzesForThisSession",1);
-                takeQuiz();
-            }else if(choice==2){
-                int incorrectCount=Integer.parseInt(jedisPooled.hget(uid+"quizScores","wrongAnswerCount"));
-                int correctCount=Integer.parseInt(jedisPooled.hget(uid+"quizScores","correctAnswerCount"));
-                float percentageCorrect = ((float)correctCount/((float)correctCount+incorrectCount))*100;
-                System.out.println("\nThank you for using the RedisQuizApp!\n" +
-                        "During this session you attempted a total of "+
-                                jedisPooled.hget(uid+"quizScores","numberOfQuizzesForThisSession")+
-                        " quizzes and answered "+ incorrectCount +
-                        " Questions incorrectly and answered " + correctCount +" Questions correctly");
-                System.out.println("Your score is: "+percentageCorrect+"%");
-
-                System.exit(0);
-            }else{
-                System.out.println("You entered: "+choice+" That is not a valid option - exiting program...");
-                System.exit(0);
-            }
-        }catch(Throwable t){
-            System.out.println("\nhmmm... in menu()..."+t.getMessage()+"  "+t.getClass());
-            if(t instanceof java.lang.NumberFormatException ){
-                System.out.println("That is not a valid option. Please enter a number next time - exiting program...");
-            }
-            System.exit(1);
+        System.out.println("Here are your options: \n[1] take a quiz\n[2] exit\n");
+        System.out.println("Enter your choice as a number: ");
+        choice = Integer.parseInt(getUserInput(""));
+        if(choice==1){
+            jedisPooled.hincrBy(uid+"quizScores","numberOfQuizzesForThisSession",1);
+            takeQuiz();
+        }else if(choice==2){
+            //do nothing (we will pass the value of choice back to the caller)
+        }else{
+            System.out.println("You entered: "+choice+" That is not a valid option - exiting program...");
+            System.exit(0);
         }
+        return choice;
+    }
+
+    static void printTestResults(){
+        int incorrectCount = 0;
+        int correctCount = 0;
+        if(jedisPooled.hexists(uid+"quizScores","wrongAnswerCount")) {
+            incorrectCount = Integer.parseInt(jedisPooled.hget(uid + "quizScores", "wrongAnswerCount"));
+        }
+        if(jedisPooled.hexists(uid+"quizScores","correctAnswerCount")){
+            correctCount=Integer.parseInt(jedisPooled.hget(uid+"quizScores","correctAnswerCount"));
+        }
+        float percentageCorrect = ((float)correctCount/((float)correctCount+incorrectCount))*100;
+        System.out.println("\nThank you for using the RedisQuizApp!\n" +
+                "During this session you attempted a total of "+
+                jedisPooled.hget(uid+"quizScores","numberOfQuizzesForThisSession")+
+                " quizzes and answered "+ incorrectCount +
+                " Questions incorrectly and answered " + correctCount +" Questions correctly");
+        System.out.println("Your score is: "+percentageCorrect+"%");
     }
 
     static String getUserInput(String prompt){
